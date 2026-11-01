@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control de Horas</title>
+    <!-- Tailwind CSS para el diseño -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Iconos de Phosphor -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 min-h-screen pb-12">
+
+    <!-- Header -->
+    <header class="bg-white shadow-sm px-4 md:px-6 py-4 flex items-center justify-between sticky top-0 z-10">
+        <div class="flex items-center gap-2 text-blue-600">
+            <i class="ph ph-timer text-2xl font-bold"></i>
+            <h1 class="font-bold text-xl tracking-tight hidden sm:block">Control de Asistencia</h1>
+        </div>
+        
+        <!-- Reloj en vivo -->
+        <div class="text-center font-mono font-bold text-lg text-gray-700 bg-gray-100 px-4 py-1 rounded-lg border border-gray-200 shadow-inner">
+            <span id="live-clock">--:--:--</span>
+        </div>
+
+        <button onclick="exportToExcel()" class="text-sm font-medium text-white bg-green-600 hover:bg-green-700 px-3 py-1.5 rounded-md flex items-center gap-2 transition-colors shadow-sm">
+            <i class="ph ph-file-xls text-lg"></i>
+            <span class="hidden sm:inline">Exportar Excel</span>
+        </button>
+    </header>
+
+    <main class="max-w-5xl mx-auto mt-6 px-4">
+        
+        <!-- Panel de Control Principal (Botones) -->
+        <section class="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 mb-6 flex flex-col md:flex-row items-center justify-between gap-4">
+            
+            <div class="text-center md:text-left w-full md:w-auto">
+                <h2 class="text-gray-500 font-medium text-sm mb-1 uppercase tracking-wide">Estado Actual</h2>
+                <p id="status-text" class="text-gray-800 font-bold text-lg md:text-xl">Listo para iniciar jornada</p>
+            </div>
+
+            <div class="flex w-full md:w-auto gap-3">
+                <button id="btn-clock-in" onclick="handleClockIn()" class="flex-1 md:flex-none bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl px-6 py-3 shadow-[0_4px_14px_0_rgba(37,99,235,0.39)] transition-transform active:scale-95 flex items-center justify-center gap-2">
+                    <i class="ph ph-sign-in text-xl"></i> Marcar Ingreso
+                </button>
+                <button id="btn-clock-out" onclick="handleClockOut()" class="hidden flex-1 md:flex-none bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl px-6 py-3 shadow-[0_4px_14px_0_rgba(225,29,72,0.39)] transition-transform active:scale-95 items-center justify-center gap-2">
+                    <i class="ph ph-sign-out text-xl"></i> Marcar Salida
+                </button>
+            </div>
+        </section>
+
+        <!-- Historial en formato Tabla -->
+        <section>
+            <div class="bg-white shadow-sm border border-gray-200 rounded-xl overflow-hidden">
+                <!-- Contenedor con scroll horizontal para móviles -->
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-center border-collapse whitespace-nowrap min-w-[700px]">
+                        <thead class="bg-[#2563eb] text-white">
+                            <tr>
+                                <th class="py-3 px-4 border border-blue-700 font-semibold w-24">Fecha</th>
+                                <th class="py-3 px-4 border border-blue-700 font-semibold w-24">Día</th>
+                                <th class="py-3 px-4 border border-blue-700 font-semibold w-32">Entrada Real</th>
+                                <th class="py-3 px-4 border border-blue-700 font-semibold w-32">Salida Real</th>
+                                <th class="py-3 px-4 border border-blue-700 font-semibold">Total Horas Trabajadas</th>
+                                <th class="py-3 px-4 border border-blue-700 font-semibold">Horas Extras</th>
+                                <th class="py-3 px-4 border border-blue-700 font-semibold w-24">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-body" class="text-gray-700">
+                            <!-- Las filas se generan aquí -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Resumen de Horas Extras Acumuladas -->
+                <div class="bg-[#f0f9ff] border-t border-blue-200 p-4 flex justify-between items-center px-6">
+                    <span class="font-bold text-blue-900 text-base md:text-lg">Total Horas Extras Acumuladas:</span>
+                    <span id="total-extras-badge" class="bg-blue-600 text-white font-black px-4 py-1.5 rounded-lg shadow-sm text-lg">
+                        0h 0m
+                    </span>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Modal de Edición -->
+    <div id="edit-modal" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-50 px-4">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+            <h3 class="font-bold text-xl mb-4 text-gray-800 border-b pb-2">Editar Registro</h3>
+            <input type="hidden" id="edit-id">
+            <p id="edit-error" class="text-red-500 text-sm mb-3 hidden">Por favor completa fecha y hora de entrada.</p>
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-600 mb-1">Fecha de Ingreso</label>
+                    <input type="date" id="edit-date" class="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-600 mb-1">Hora Entrada</label>
+                        <input type="time" id="edit-entry" class="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-600 mb-1">Hora Salida</label>
+                        <input type="time" id="edit-exit" class="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 mt-6">
+                <button onclick="closeModal()" class="px-4 py-2 text-gray-600 font-medium hover:bg-gray-100 rounded-lg transition-colors">Cancelar</button>
+                <button onclick="saveEdit()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors shadow-sm">Guardar Cambios</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Confirmación de Eliminación -->
+    <div id="delete-modal" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-50 px-4">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl text-center">
+            <div class="text-red-500 mb-4 flex justify-center">
+                <i class="ph ph-warning-circle text-6xl"></i>
+            </div>
+            <h3 class="font-bold text-xl mb-2 text-gray-800">¿Eliminar registro?</h3>
+            <p class="text-gray-500 mb-6">Esta acción no se puede deshacer.</p>
+            <div class="flex justify-center gap-3">
+                <button onclick="closeDeleteModal()" class="px-4 py-2 text-gray-600 font-medium hover:bg-gray-100 rounded-lg transition-colors border border-gray-200">Cancelar</button>
+                <button id="confirm-delete-btn" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg transition-colors shadow-sm">Sí, eliminar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Alerta -->
+    <div id="alert-modal" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-50 px-4">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl text-center">
+            <h3 class="font-bold text-xl mb-2 text-gray-800" id="alert-title">Aviso</h3>
+            <p class="text-gray-500 mb-6" id="alert-message">Mensaje</p>
+            <button onclick="closeAlertModal()" class="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors shadow-sm w-full">Entendido</button>
+        </div>
+    </div>
+
+    <script>
+        // Variables
+        let sessions = JSON.parse(localStorage.getItem('workTimeSessionsV2')) || [];
+        
+        // Elementos DOM
+        const liveClockEl = document.getElementById('live-clock');
+        const statusTextEl = document.getElementById('status-text');
+        const btnIn = document.getElementById('btn-clock-in');
+        const btnOut = document.getElementById('btn-clock-out');
+        const tableBody = document.getElementById('table-body');
+        const totalExtrasBadge = document.getElementById('total-extras-badge');
+        const editModal = document.getElementById('edit-modal');
+        const deleteModal = document.getElementById('delete-modal');
+        const alertModal = document.getElementById('alert-modal');
+        let sessionToDelete = null;
+
+        // Inicializar reloj
+        function updateClock() {
+            liveClockEl.textContent = new Date().toLocaleTimeString('es-PE', { hour12: false });
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // Utilidades de formato
+        const formatTimeStr = (ms) => {
+            if (!ms) return '';
+            return new Date(ms).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', hour12: false });
+        };
+
+        const formatDuration = (ms) => {
+            if (!ms || ms <= 0) return '0';
+            const totalMins = Math.floor(ms / 60000);
+            const hours = Math.floor(totalMins / 60);
+            const mins = totalMins % 60;
+            if (hours === 0) return `${mins}m`;
+            return `${hours}h ${mins.toString().padStart(2, '0')}m`;
+        };
+
+        const capitalize = (str) => str.charAt(0).toUpperCase() + str.slice(1);
+
+        // Lógica Principal de Cálculos
+        function calculateSessionMetrics(entryMs, exitMs) {
+            if (!exitMs) return { totalWorkedMs: 0, overtimeMs: 0 };
+            
+            const entryDate = new Date(entryMs);
+            const exitDate = new Date(exitMs);
+            const day = entryDate.getDay(); // 0 Dom, 1 Lun ... 6 Sab
+
+            let elapsedMs = exitMs - entryMs;
+            let lunchMs = 0;
+
+            // Restar 1 hora de refrigerio si trabajó más de 5 horas (No aplica Sábados que son típicamente 3 horas)
+            if (day !== 6 && elapsedMs >= 5 * 60 * 60 * 1000) {
+                lunchMs = 60 * 60 * 1000;
+            }
+
+            let totalWorkedMs = Math.max(0, elapsedMs - lunchMs);
+
+            // Definir jornada estándar: Inicio a las 08:00 am
+            let standardStart = new Date(entryDate);
+            standardStart.setHours(8, 0, 0, 0);
+
+            // Fin a las 18:00 (L-V y Dom) o 11:00 (Sáb)
+            let standardEndHour = (day === 6) ? 11 : 18;
+            let standardEnd = new Date(entryDate);
+            standardEnd.setHours(standardEndHour, 0, 0, 0);
+
+            let overtimeMs = 0;
+
+            // 1. Horas extras previas al horario de entrada (antes de las 8:00 am)
+            if (entryDate < standardStart) {
+                // Tomar en cuenta solo el tiempo hasta el inicio de jornada (o hasta que salió, si fue muy breve)
+                const endOfMorningOvertime = Math.min(exitDate.getTime(), standardStart.getTime());
+                overtimeMs += (endOfMorningOvertime - entryDate.getTime());
+            }
+
+            // 2. Horas extras posteriores al horario de salida (después de las 18:00 o 11:00)
+            if (exitDate > standardEnd) {
+                // Tomar en cuenta el tiempo desde el fin de jornada hacia adelante
+                const startOfEveningOvertime = Math.max(entryDate.getTime(), standardEnd.getTime());
+                overtimeMs += (exitDate.getTime() - startOfEveningOvertime);
+            }
+
+            return { totalWorkedMs, overtimeMs };
+        }
+
+        // Renderizado
+        function renderUI() {
+            localStorage.setItem('workTimeSessionsV2', JSON.stringify(sessions));
+            
+            const activeSession = sessions.find(s => !s.exitTime);
+
+            // Botones
+            if (activeSession) {
+                btnIn.classList.add('hidden');
+                btnOut.classList.remove('hidden');
+                btnOut.classList.add('flex');
+                statusTextEl.innerHTML = `<span class="text-blue-600 animate-pulse">●</span> Turno iniciado a las ${formatTimeStr(activeSession.entryTime)}`;
+            } else {
+                btnIn.classList.remove('hidden');
+                btnOut.classList.add('hidden');
+                btnOut.classList.remove('flex');
+                statusTextEl.textContent = "Listo para iniciar jornada";
+            }
+
+            // Tabla
+            tableBody.innerHTML = '';
+            let totalAcumulatedExtras = 0;
+
+            // Ordenar por fecha (más reciente primero para visualización, o cronológico)
+            // Lo dejaremos cronológico descendente
+            const sortedSessions = [...sessions].sort((a, b) => b.entryTime - a.entryTime);
+
+            if (sortedSessions.length === 0) {
+                tableBody.innerHTML = `<tr><td colspan="7" class="py-8 text-gray-400">No hay registros guardados. ¡Marca tu primer ingreso!</td></tr>`;
+            }
+
+            sortedSessions.forEach((session, index) => {
+                const entryDate = new Date(session.entryTime);
+                const fechaStr = entryDate.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                const diaStr = capitalize(entryDate.toLocaleDateString('es-PE', { weekday: 'long' }));
+                
+                const { totalWorkedMs, overtimeMs } = calculateSessionMetrics(session.entryTime, session.exitTime);
+                totalAcumulatedExtras += overtimeMs;
+
+                const bgClass = index % 2 === 0 ? 'bg-white' : 'bg-blue-50/30';
+                
+                let extraCellHtml = session.exitTime && overtimeMs > 0 
+                    ? `<span class="text-rose-600 font-bold bg-rose-50 px-2 py-1 rounded">${formatDuration(overtimeMs)}</span>` 
+                    : `<span class="text-gray-400">0</span>`;
+                
+                if (!session.exitTime) extraCellHtml = `<span class="text-blue-500 animate-pulse">En curso...</span>`;
+
+                tableBody.innerHTML += `
+                    <tr class="${bgClass} border-b border-gray-200 hover:bg-gray-50 transition-colors">
+                        <td class="py-3 px-4 border-x border-gray-200">${fechaStr}</td>
+                        <td class="py-3 px-4 border-x border-gray-200">${diaStr}</td>
+                        <td class="py-3 px-4 border-x border-gray-200 font-medium">${formatTimeStr(session.entryTime)}</td>
+                        <td class="py-3 px-4 border-x border-gray-200 font-medium">${session.exitTime ? formatTimeStr(session.exitTime) : '--:--'}</td>
+                        <td class="py-3 px-4 border-x border-gray-200 font-semibold text-gray-800">${session.exitTime ? formatDuration(totalWorkedMs) : '--'}</td>
+                        <td class="py-3 px-4 border-x border-gray-200">${extraCellHtml}</td>
+                        <td class="py-3 px-4 border-x border-gray-200">
+                            <div class="flex justify-center gap-2">
+                                <button onclick="openEditModal('${session.id}')" class="text-blue-500 hover:bg-blue-100 p-1.5 rounded" title="Editar"><i class="ph ph-pencil-simple text-lg"></i></button>
+                                <button onclick="deleteSession('${session.id}')" class="text-red-500 hover:bg-red-100 p-1.5 rounded" title="Eliminar"><i class="ph ph-trash text-lg"></i></button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            totalExtrasBadge.textContent = formatDuration(totalAcumulatedExtras);
+        }
+
+        // Acciones Principales
+        function handleClockIn() {
+            if (sessions.find(s => !s.exitTime)) return;
+
+            sessions.push({
+                id: Date.now().toString(),
+                entryTime: Date.now(),
+                exitTime: null
+            });
+            renderUI();
+        }
+
+        function handleClockOut() {
+            const active = sessions.find(s => !s.exitTime);
+            if (!active) return;
+            active.exitTime = Date.now();
+            renderUI();
+        }
+
+        // Funciones de Modales de Alerta/Confirmación
+        function showAlert(title, message) {
+            document.getElementById('alert-title').textContent = title;
+            document.getElementById('alert-message').textContent = message;
+            alertModal.classList.remove('hidden');
+            alertModal.classList.add('flex');
+        }
+
+        function closeAlertModal() {
+            alertModal.classList.add('hidden');
+            alertModal.classList.remove('flex');
+        }
+
+        // CRUD (Eliminar / Editar)
+        function deleteSession(id) {
+            sessionToDelete = id;
+            deleteModal.classList.remove('hidden');
+            deleteModal.classList.add('flex');
+        }
+
+        function closeDeleteModal() {
+            sessionToDelete = null;
+            deleteModal.classList.add('hidden');
+            deleteModal.classList.remove('flex');
+        }
+
+        document.getElementById('confirm-delete-btn').addEventListener('click', () => {
+            if (sessionToDelete) {
+                sessions = sessions.filter(s => s.id !== sessionToDelete);
+                renderUI();
+                closeDeleteModal();
+            }
+        });
+
+        function openEditModal(id) {
+            const session = sessions.find(s => s.id === id);
+            if(!session) return;
+
+            document.getElementById('edit-id').value = session.id;
+            
+            // Formatear fechas para los inputs (YYYY-MM-DD) y (HH:MM)
+            const entryD = new Date(session.entryTime);
+            document.getElementById('edit-date').value = entryD.toISOString().split('T')[0];
+            document.getElementById('edit-entry').value = entryD.toTimeString().slice(0, 5);
+            
+            if (session.exitTime) {
+                const exitD = new Date(session.exitTime);
+                document.getElementById('edit-exit').value = exitD.toTimeString().slice(0, 5);
+            } else {
+                document.getElementById('edit-exit').value = '';
+            }
+            
+            document.getElementById('edit-error').classList.add('hidden');
+            editModal.classList.remove('hidden');
+            editModal.classList.add('flex');
+        }
+
+        function closeModal() {
+            editModal.classList.add('hidden');
+            editModal.classList.remove('flex');
+        }
+
+        function saveEdit() {
+            const id = document.getElementById('edit-id').value;
+            const dateVal = document.getElementById('edit-date').value;
+            const entryVal = document.getElementById('edit-entry').value;
+            const exitVal = document.getElementById('edit-exit').value;
+
+            if (!dateVal || !entryVal) {
+                document.getElementById('edit-error').classList.remove('hidden');
+                return;
+            }
+
+            const session = sessions.find(s => s.id === id);
+            if(session) {
+                // Reconstruir timestamps
+                const newEntry = new Date(`${dateVal}T${entryVal}:00`).getTime();
+                session.entryTime = newEntry;
+                
+                if (exitVal) {
+                    // Asumimos que la salida es en el mismo día. Si entra a las 23:00 y sale 01:00 habría que ajustar,
+                    // pero para jornadas de día normal, funciona perfecto.
+                    let newExit = new Date(`${dateVal}T${exitVal}:00`).getTime();
+                    // Si la salida es menor a la entrada, asumimos que cruzó la medianoche
+                    if (newExit < newEntry) {
+                        newExit += 24 * 60 * 60 * 1000; 
+                    }
+                    session.exitTime = newExit;
+                } else {
+                    session.exitTime = null;
+                }
+            }
+            closeModal();
+            renderUI();
+        }
+
+        // Exportar a Excel (CSV)
+        function exportToExcel() {
+            if (sessions.length === 0) {
+                showAlert('Sin datos', 'No hay registros para exportar a Excel.');
+                return;
+            }
+
+            let csvContent = "data:text/csv;charset=utf-8,";
+            // Cabeceras
+            csvContent += "Fecha,Dia,Entrada Real,Salida Real,Total Horas Trabajadas,Horas Extras\n";
+
+            const sortedSessions = [...sessions].sort((a, b) => a.entryTime - b.entryTime);
+
+            sortedSessions.forEach(session => {
+                const d = new Date(session.entryTime);
+                const fecha = d.toLocaleDateString('es-PE');
+                const dia = capitalize(d.toLocaleDateString('es-PE', { weekday: 'long' }));
+                const entrada = formatTimeStr(session.entryTime);
+                const salida = session.exitTime ? formatTimeStr(session.exitTime) : 'En curso';
+                
+                const metrics = calculateSessionMetrics(session.entryTime, session.exitTime);
+                const total = session.exitTime ? formatDuration(metrics.totalWorkedMs) : '-';
+                const extras = session.exitTime ? formatDuration(metrics.overtimeMs) : '-';
+
+                // Añadir fila
+                csvContent += `${fecha},${dia},${entrada},${salida},${total},${extras}\n`;
+            });
+
+            // Descarga
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "Registro_Asistencia.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // Iniciar
+        renderUI();
+    </script>
+</body>
+</html>
